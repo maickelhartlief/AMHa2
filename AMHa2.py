@@ -28,8 +28,8 @@ class AMHa2(AMHa):
                  update_attribute = 'drinker_type_min1',
                  n_runs = 5,
                  step_start = 2,
-                 n_steps = 5,
-                 use_network = False,
+                 n_steps = 28,
+                 use_network = True,
                  data_matching = False,
                  track_ids = []):
         super().__init__(data,
@@ -45,6 +45,10 @@ class AMHa2(AMHa):
                          track_ids = track_ids)
 
  
+    def apply_intervention(self, modifier = 1, level = 'personal', drinker_type = 'A', history = ''):
+        for history in drinker_types:
+            super().apply_intervention(modifier = modifier, level = level, drinker_type = drinker_type, history = history)
+
     def update_node(self, node):
         # handle shifting the 'previous observation' part of the sequence and use AMHa method for the rest
         return self.g.nodes[node][self.update_attribute][-1] + super().update_node(node)

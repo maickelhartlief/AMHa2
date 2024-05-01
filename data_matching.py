@@ -16,6 +16,7 @@ if __name__ == "__main__":
     print('importing data from file...', end = '\r')
     data = pd.read_csv('data/data.csv', converters = {'links': pd.eval})
     
+    errors = []
     for Model, name, in [(AMHa, 'AMHa'), (AMHa2, 'AMHa2')]:
         
         # import model-dependent data
@@ -27,14 +28,15 @@ if __name__ == "__main__":
         model = Model(data,
                       transitions, 
                       s,
-                      n_runs = 2, # for faster testing
                       n_steps = 5,
-                      data_matching = True,
-                      use_network = False) # for faster testing
+                      data_matching = True)
         # run model
         model.run()
 
         # show results
         model.plot_results(name_addition = '_data_matching')
-        #model.report_tracked()
+        errors.append(model.errors)
+
+    # plot errors for both models in 1 plot
+    # TODO: implement this.
 

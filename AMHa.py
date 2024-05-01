@@ -29,8 +29,8 @@ class AMHa():
                  update_attribute = 'drinker_type',
                  n_runs = 5,
                  step_start = 2,
-                 n_steps = 5,
-                 use_network = False,
+                 n_steps = 28,
+                 use_network = True,
                  data_matching = False,
                  track_ids = []):
         self.data_matching = data_matching
@@ -57,9 +57,16 @@ class AMHa():
         self.pops = pops
         self.update_attribute = update_attribute
         self.use_network = use_network
+
+        # declare empty modifier settings. initializing is done in apply_intervention()
+        self.modifier_level = ''
+        self.modifier = ''
+        self.modifier_type = ''
+
         # does not show which waves are missing from true data if there are any missing
         self.trackers = {track_id : {'true' : data[data['id'] == track_id]['drinker_type'].tolist()[1:], 'predicted' : []} for track_id in track_ids}
         self.lapses = {'relapses' : 0, 'first_time_lapses' : 0, 'ids' : []}
+
 
     def initialize_network(self, verbose = True):
         if os.path.isfile(f'data/network_start_wave_{self.step_start}'):
@@ -102,6 +109,25 @@ class AMHa():
         return g
 
 
+    def apply_intervention(self, modifier = 1, level = 'personal', drinker_type = 'A', history = ''):
+        self.modifier = modifier
+        self.modifier_level = level
+        self.modifier_type = drinker_type
+        # TODO: implement this
+        if level == 'social':
+            # modify
+            self.s.loc[self.s['link'] == history + self.modifier_type, 's'] *= self.modifier
+            print(f'modified {self.modifier_level} influence of {history + self.modifier_type} by factor of {self.modifier}')
+        elif level == 'personal':
+            # modify
+            from_type = history + ('H' if self.modifier_type == 'A' else 'A')
+            self.transitions.loc[(self.transitions['to'] == self.modifier_type) & (self.transitions['from'] == from_type), 'ratio'] *= self.modifier
+            # normalize
+            condition = self.transitions['from'] == from_type
+            self.transitions.loc[condition, 'ratio'] /= sum(self.transitions[condition]['ratio'])
+            print(f'modified {self.modifier_level} {from_type}->{self.modifier_type} by factor of {self.modifier}')
+
+
     def report_step(self, step, run):
         print(f'simulating...    (run: {run + 1} / {self.n_runs},    step: {step - self.step_start + 1} / {self.n_steps})', end = '\r')
         # report and save stats
@@ -135,13 +161,16 @@ class AMHa():
                     ratios.loc[ratios['to'] == drinker_type, 'ratio'] = 0
 
         # normalize
-        total = sum(ratios['ratio'])
-        ratios['ratio'] = ratios['ratio'].apply(lambda ratio : ratio / total)
+        ratios['ratio'] /= sum(ratios['ratio'])
+
         return ratios
 
 
     # update state of node stochastically
     def update_node(self, node):
+        # TODO: update with personal and social modifiers 
+        #       (maybe only once by updating transitions and s?)
+
         # get current state
         cur_type = self.g.nodes[node][self.update_attribute]
         
@@ -212,51 +241,47 @@ class AMHa():
         # report observed lapses and relapses
         total_steps = self.n_steps * self.n_runs
         print(f"{self.lapses['relapses'] / total_steps } relapses and {self.lapses['first_time_lapses'] / total_steps} first time lapses found per step on average!")
+        # TODO: return last wave results
+        last_wave = self.results[self.results['step'] == self.results['step'].max()]
+        return self.lapses, last_wave
 
 
     def plot_results(self, name = 'AMHa', results = None, name_addition = ''):
-        # TODO: adjust plotting for data_matching mode (each step as separate lineplot i guess?)
-
         # account for possible child class overwrite of results
         if results is None:
             results = self.results
         
         # plot line per drinker type
         for drinker_type in drinker_types:
-            # plot predicted
+            # format results
             cur_results = results[results['drinker_type'] == drinker_type]
             cur_results['count'] /= self.total_per_wave[self.step_start - 1]
             x = list(range(self.step_start, self.n_steps + self.step_start + 1))
             y = np.array([np.mean(cur_results[cur_results['step'] == step]['count']) for step in x])
             y_stds = [np.std(cur_results[cur_results['step'] == step]['count']) for step in x]
             ci = np.array([1.96 * y_std / sqrt(self.n_runs) for y_std in y_stds])
+            
             # plot true
             true_pops = self.plot_true(drinker_type)
-            if self.data_matching:
-                print('plotting data_matching')
-                print(x)
-                print(true_pops)
-                print(y)
-                print(ci)
+            
+            # plot predicted
+            if self.data_matching: # plot from each true point to the step after.
                 for step in range(self.n_steps):
-                    print(f'plotting step [{step + 2}:{step + 4}]')
-                    print(x[step : step + 2])
-                    print([true_pops[step + 1], y[step + 1]]) # TODO: should go from true data...
-                    print([true_pops[step + 1], (y - ci)[step + 1]])
-                    plt.plot(x[step : step + 2], [true_pops[step + 1], y[step + 1]], color = colors[drinker_type])
-                    plt.fill_between(x[step : step + 2], [true_pops[step + 1], (y - ci)[step + 1]], [true_pops[step + 1], (y + ci)[step + 1]], color = colors[drinker_type], alpha = 0.3)
+                    plt.plot(x[step : step + 2], 
+                             [true_pops[step + 1], y[step + 1]], 
+                             color = colors[drinker_type])
+                    plt.fill_between(x[step : step + 2], 
+                                     [true_pops[step + 1], (y - ci)[step + 1]], 
+                                     [true_pops[step + 1], (y + ci)[step + 1]], 
+                                     color = colors[drinker_type], alpha = 0.3)
             else: # regular plotting
                 plt.plot(x, y, color = colors[drinker_type])
                 plt.fill_between(x, (y - ci), (y + ci), color = colors[drinker_type], alpha = 0.3)
          
-            # # plot true
-            # true_pops = self.plot_true(drinker_type)
-
             # plot error per wave per category
-
             plt.vlines(x = x, 
-                       ymin = y[:6], 
-                       ymax = true_pops[1:], 
+                       ymin = y[:min(6, len(y))], 
+                       ymax = true_pops[1:min(6, len(y)) + 1], 
                        color = colors[drinker_type],
                        linestyles = 'dashed')
 
@@ -269,6 +294,8 @@ class AMHa():
         plt.savefig(f'results/{name}_populations{"_s" if self.use_network else ""}{name_addition}')   
         plt.clf()  
 
+        # TODO: make this clearer by combining the different runs into 1 plot. 
+        #       this requires an outside function and a return statement.
         plt.plot(range(self.step_start, len(self.errors) + self.step_start), self.errors)
         plt.title('total error of predictions per wave')
         plt.ylabel('number of people')
