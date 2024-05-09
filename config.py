@@ -32,3 +32,12 @@ def drop_columns(data, columns):
     columns = [column for column in columns if column in data.columns]
     return data.drop(columns = columns)
 
+def normalize_s(s):
+    s = s.rename(columns = {'s' : 'ratio'})
+    for link_type in s['link'].unique():
+        for from_type in drinker_types:
+            condition = (s['from'] == from_type) & (s['link'] == link_type)
+            shift = sum(s[condition]['ratio'])
+            s.loc[condition, 'ratio'] -= shift / 3
+    # rename to match transition column name
+    return s

@@ -31,7 +31,7 @@ class AMHa2(AMHa):
                  n_steps = 28,
                  use_network = True,
                  data_matching = False,
-                 track_ids = []):
+                 start_type = 'data'):
         super().__init__(data,
                          transitions, 
                          s, 
@@ -42,20 +42,23 @@ class AMHa2(AMHa):
                          n_steps = n_steps,
                          use_network = use_network,
                          data_matching = data_matching,
-                         track_ids = track_ids)
+                         start_type = start_type)
+        self.name = 'AMHa2'
 
  
     def apply_intervention(self, modifier = 1, level = 'personal', drinker_type = 'A', history = ''):
         for history in drinker_types:
             super().apply_intervention(modifier = modifier, level = level, drinker_type = drinker_type, history = history)
 
+    def report_tracked(self):
+        return super().report_tracked(results = self.to_current_results())
+
     def update_node(self, node):
         # handle shifting the 'previous observation' part of the sequence and use AMHa method for the rest
         return self.g.nodes[node][self.update_attribute][-1] + super().update_node(node)
 
-    def plot_results(self, name = 'AMHa2', name_addition = ''):
+    def to_current_results(self):
         ## sns has version issues and my laptop refuses to update so i am forced to do this is the most roundabout way ever....
-        
         # convert results into 3-category format
         results = self.results
         results['drinker_type'] = results['drinker_type'].apply(lambda seq : seq[-1])
@@ -64,7 +67,8 @@ class AMHa2(AMHa):
             for step in results['step'].unique().tolist():
                 dumb_partition = results[(results['run'] == run) & (results['step'] == step)]
                 stupid_list.append(dumb_partition.groupby('drinker_type').agg({'run': 'mean', 'step': 'mean', 'count' : 'sum'}).reset_index())
-        results = pd.concat(stupid_list)
-        
+        return pd.concat(stupid_list)
+
+    def plot_results(self, name_addition = ''): 
         # use plotting like in AMHa
-        super().plot_results(name = name, results = results, name_addition = name_addition)
+        super().plot_results(results = self.to_current_results(), name_addition = name_addition)
